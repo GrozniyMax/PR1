@@ -70,8 +70,7 @@ print_newline:
 ; Совет: выделите место в стеке и храните там результаты деления
 ; Не забудьте перевести цифры в их ASCII коды.
 print_uint:
-    push rsp
-    sub rsp, 8
+    sub rsp, 8          ;Добавим в конце, чтобы даже шанса на поломку стека не было
     push 0              ;Стоп символ для вывода, чтобы потом не мучаться с счетчиком
     push rdi
     mov rax, rdi
@@ -91,33 +90,66 @@ print_uint:
         inc rcx
         jmp .loop
     .output:
-      .first_number:
-        add sil, '0'
-        mov rdi, rsi
-
-        sub rsp, 8
-        call print_char
-        add rsp, 8
-      
-      .others:
-        .even:
-            pop rdi             ; Четная цифра, если считать с 1 и от 1
-            cmp rdi, 0          ; Здесь не требуется выравнивания
-            je .end
+      mov al, cl
+      mov cl, 2
+      div cl
+      cmp ah, 0
+      je .odd_number_digits     ;Количество цифр напрямую влияет на необходимость выравнивания
+                                ;Нечетное количество цифр учитывая первую
+      xor rax, rax
+      xor rcx, rcx
+       .even_number_digits:     ;Четное количество цифр учитывая первую
+            .first_number_even:
+            add sil, '0'
+        
+            mov rdi, rsi
             
             call print_char
+            xor rsi, rsi
+            .others_even:
+                .even_even:
+                pop rdi             ; Четная цифра, если считать с 1 и от 1
+                cmp rdi, 0          ; Здесь не требуется выравнивания
+                je .end
             
-        .odd:
-            pop rdi             ; Нечетная по номеру цифра
-            cmp rdi, 0          ; Здесь требуется выравнивание
-            je .end
+                sub rsp, 8
+                call print_char
+                add rsp, 8
             
+                .odd_even:
+                pop rdi             ; Нечетная по номеру цифра
+                cmp rdi, 0          ; Здесь требуется выравнивание
+                je .end
+
+                call print_char
+
+                jmp .others_even
+       .odd_number_digits:          ;Нечетное количество цифр учитывая первую
+            .first_number_odd:
+            add sil, '0'
+        
+            mov rdi, rsi
             sub rsp, 8
             call print_char
             add rsp, 8
+            .others_odd:
+                .even_odd:
+                pop rdi             ; Четная цифра, если считать с 1 и от 1
+                cmp rdi, 0          ; Здесь не требуется выравнивания
+                je .end
             
+                
+                call print_char
+                
             
-            jmp .others
+                .odd_odd:
+                pop rdi             ; Нечетная по номеру цифра
+                cmp rdi, 0          ; Здесь требуется выравнивание
+                je .end
+                sub rsp, 8
+                call print_char
+                add rsp, 8
+                jmp .others_odd
     .end:
         add rsp, 8
         ret
@@ -146,34 +178,22 @@ print_int:
 
 ; Принимает два указателя на нуль-терминированные строки, возвращает 1 если они равны, 0 иначе
 string_equals:
-
-    push rdi                    ; Сохраняем указатель1
-    push rsi                    ; Сохраняем указатель2
-      
-    xor rax, rax                ; Очистить rax
-    
-    sub rsp, 8                  ;Выравнивание стека
-    call string_length          ;
-    add rsp, 8                  ;Выравнивание стека
-    
-    mov rsi, rax                ; Сохраняем длинну 1 строки
-    
-    pop rdi                     ; Достаем указатель2 -> rdi
-    
-    
-    call string_length          ; длинна строки2->rax
-    
-    
-    cmp rax, rsi                ; Сравниваем строки по длинне
-    jne .wrong_len
-    pop rsi                     ;Указатель1->rsi
+    ;rdi - 1 строка
+    ;rsi - 2 строка
+    xor rax, rax           ;Очистим rax
     .loop:
-        cmp rax, -1             ; В rax  лежит длинна строки и мы начнем сравнивать с конца, чтобы ее нигде не хранить
-        je .yes                 ; Если  rax==-1 то мы прошли всю строку
-        mov r9b, byte[rsi+rax]  ;записываем символ из строки2->r9. Так, как почему, то я не могу сделать cmp byte[], byte[]
-        cmp r9b, byte[rdi+rax]
+        xor rcx, rcx       ;Очистим его на всякий случай
+        mov cl, byte[rdi+rax]
+        add cl, byte[rsi+rax]
+        
+        cmp rcx, 0;        ;Если rcx==0, то оба символа нулевые, т.е строки закончились
+        je .yes
+        
+        mov cl, byte[rdi+rax]
+        cmp cl, byte[rsi+rax]
         jne .not
-        dec rax
+        
+        inc rax
         jmp .loop
     .yes:
         mov rax, 1
@@ -181,15 +201,8 @@ string_equals:
     .not:
         mov rax, 0
         jmp .end
-    .wrong_len:
-        
-        pop rdi
-        mov rax, 0
-        jmp .end
     .end:
         ret
-
-; Читает один символ из stdin и возвращает его. Возвращает 0 если достигнут конец потока
 read_char:
     
     push 0          
@@ -211,7 +224,6 @@ read_char:
 ; При успехе возвращает адрес буфера в rax, длину слова в rdx.
 ; При неудаче возвращает 0 в rax
 ; Эта функция должна дописывать к слову нуль-терминатор
-
 read_word:
     
     xor rax, rax                ;
@@ -221,16 +233,18 @@ read_word:
     cmp rsi, 0                  ;
     jle .small_buff                  ;Проверяем наличие буфера
     
-    push rdx
+    
     push rdi                    ;Сохраняем адрес буфера
     push rsi                    ;Сохраняем размер буфера
     
     .whitespace_skip:
-        xor r9, r9
+        
+        sub rsp, 8
         call read_char
+        add rsp, 8
         
         cmp rax, 0              ; Проверка на  ctrl+d
-        je .small_buff
+        je .empty_word
         cmp rax, 0x20           ; Проверка на пробел
         je .whitespace_skip     ;
         cmp rax, 0x9            ; Проверка на табуляцию
@@ -241,32 +255,31 @@ read_word:
     .first_letter:
         pop rsi                 ;Достаем размер буфера
         pop rdi                 ;Достаем адрес буфера
-        pop rdx                 ;
         
-        mov byte[rdi+rdx], al      ;Сохраняем символ
-        inc rdx                 ;
-        cmp rdx, rsi            ;
-        je .try_last            ;При совпадении счетчика и размера буфера выходим
+        mov byte[rdi], al      ;Сохраняем символ
+        cmp rsi, 1
+        je .try_last
+        mov rdx, 1
         push rdx                ;Сохраняем состояние 
         push rdi                ;
         push rsi                ;
         
     .others_loop:
-        xor r9, r9
+        
         call read_char
     
-        pop rsi                 ;Достаем размер буфера
-        pop rdi                 ;Достаем адрес буфера
-        pop rdx
-        
         cmp rax, 0              ; Проверка на  ctrl+d
         je .success
         cmp rax, 0x20           ; Проверка на пробел
-        je .success                 ;
+        je .success             ;
         cmp rax, 0x9            ; Проверка на табуляцию
-        je .success                 ;
+        je .success             ;
         cmp rax, 0xA            ; Проверка на перевод строки
-        je .success                 ;
+        je .success             ;
+        
+        pop rsi                 ;Достаем размер буфера
+        pop rdi                 ;Достаем адрес буфера
+        pop rdx
         
         mov byte[rdi+rdx], al   ;Сохраняем символ
         inc rdx                 ;
@@ -279,70 +292,74 @@ read_word:
         
         jmp .others_loop
     .try_last:
-        xor r9, r9
+        push rdx                ;Сохраняем состояние 
+        push rdi                ;
+        push rsi                ;
         call read_char
         cmp rax, 0              ; Проверка на  ctrl+d
         je .success
         cmp rax, 0x20           ; Проверка на пробел
-        je .success                 ;
+        je .success             ;
         cmp rax, 0x9            ; Проверка на табуляцию
-        je .success                 ;
+        je .success             ;
         cmp rax, 0xA            ; Проверка на перевод строки
-        je .success                 ;
-        jmp .small_buff
+        je .success             ;
         
     .small_buff:
+        pop rsi                 ;Достаем размер буфера
+        pop rdi                 ;Достаем адрес буфера
+        pop rdx
         mov rax, 0
         jmp .end
     .success:
+        pop rsi                 ;Достаем размер буфера
+        pop rdi                 ;Достаем адрес буфера
+        pop rdx
+        mov byte[rdi+rdx], 0 ;Добавляем нуль терминатор
         mov rax, rdi;
-        mov byte[rdi+rdx], 0      ;Добавляем нуль терминатор
+        jmp .end 
+    .empty_word:
+        pop rsi                 ;Достаем размер буфера
+        pop rdi                 ;Достаем адрес буфера
+        mov rax, rdi
+        mov rdx, 0   
     .end:
         ret
- 
 
 ; Принимает указатель на строку, пытается
 ; прочитать из её начала беззнаковое число.
 ; Возвращает в rax: число, rdx : его длину в символах
 ; rdx = 0 если число прочитать не удалось
 parse_uint:
+    mov rax, 1            ; Хранит 10**{номер_цифры c 0}
+    xor r9, r9          ; Хранит длинну
+    xor rcx, rcx          ; Хранит число 
+    mov rsi, 10 
     
-    xor rdx, rdx                ;
-    xor rax, rax                ;
-    xor r9, r9                  ;
-    xor rbx, rbx
-    
-    cmp byte[rdi+rdx], 0        ;
-    je .end                     ;
-    cmp byte[rdi+rdx], '9'      ; Если код символа > '9', то это уже не цифра
-    jg .error                   ;
-    mov r9b, byte[rdi+rdx]      ;
-    sub r9b, '0'                ; Если код символа < '0', то это уже не цифра
-    jl .error                   ;
-    add rax, r9                 ;
-    inc rdx
-    
-    mov r8, 10                  ;
-
     .loop:
-        cmp byte[rdi+rdx], 0    ;
-        je .end                 ;
-        cmp byte[rdi+rdx], '9'  ; Если код символа > '9', то это уже не цифра
-        jg .end
-        xor r9, r9              ;Очистим r9               
-        mov r9b, byte[rdi+rdx]  ;
-        sub r9b, '0'            ; Если код символа < '0', то это уже не цифра
-        jl .end                 ;
-        imul r9, r8             ;
-        add rax, r9             ;
-        imul r8, 10             ;
-        inc rdx
+        cmp byte[rdi + r9], 0
+        je .success
+        cmp byte[rdi + r9], '9';
+        jg .error
+        sub byte[rdi + r9], '0';
+        jl .error
+        push rax
+        mul byte[rdi + r9]
+        add rcx, rax
+        inc r9
+        pop rax
+        mul rsi
         jmp .loop
-     .error:
-        mov rdx, 0;
+    .error:
+        mov rdx, 0
+        jmp .end
+    .success:
+        mov rax, rcx;
+        mov rdx, r9
+    .end:
         ret
-     .end:
-        ret
+        
+    
 
 
 
@@ -353,56 +370,49 @@ parse_uint:
 ; Возвращает в rax: число, rdx : его длину в символах (включая знак, если он был) 
 ; rdx = 0 если число прочитать не удалось
 parse_int:
-    
     cmp byte[rdi], '-'
     je .negative
-    
+    sub rsp, 8
     call parse_uint
+    add rsp, 8
     jmp .end
     .negative:
         inc rdi
         
+        sub rsp, 8
         call parse_uint
+        add rsp, 8
         
         neg rax
         inc rdx
     .end:
-        
         ret
 
 ; Принимает указатель на строку, указатель на буфер и длину буфера
 ; Копирует строку в буфер
 ; Возвращает длину строки если она умещается в буфер, иначе 0
 string_copy:
-    
-    push rsi                ; сохраняем указатель на буфер
-    push rdi                ; сохраняем указатель на строку
-    push rdx                ; сохраняем длину буфера
-    
-    
-    call string_length
-    
-    pop rdx
-    cmp rdx, rax;
-    jl .error
-    pop rdi
-    pop rsi
-    push rax                ; Длинну строки на стек
-    xor rax, rax            ; Очистить rax
-    
+    xor rax, rax
+    ;rsi указатель на буфер
+    ;rdi указатель на строку
+    ;rdx длину буфера
     .loop:
-        cmp byte[rdi+rax], 0            ; проверка на стоп-символ
-        je .end
-        mov r8b, byte[rdi+rax]
-        mov byte[rsi+rax], r8b
+        cmp byte[rdi + rax], 0
+        je .success
+        cmp rdx, 1          ; c 1 тк , надо доп место для нуль-терминатора
+        jle .overflow
+        xor r9b, r9b
+        mov r9b, byte[rdi+rax]
+        mov byte[rsi+rax], r9b
         inc rax
+        dec rdx
         jmp .loop
+    .overflow:
+        mov rax, 0;
+        jmp .end
+    .success:
+        mov byte[rsi+rax], 0
     .end:
-        mov byte[rsi+rax+1], 0;
-        
-        pop rax
-        add rsp, 8          ;Выравнивание стека
         ret
-    .error:
-        mov al, 0;
-        ret
+    
+
