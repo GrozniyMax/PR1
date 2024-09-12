@@ -70,7 +70,8 @@ print_newline:
 ; Совет: выделите место в стеке и храните там результаты деления
 ; Не забудьте перевести цифры в их ASCII коды.
 print_uint:
-    sub rsp, 8          ;Добавим в конце, чтобы даже шанса на поломку стека не было
+    sub rsp, 32         ;Добавим в конце, чтобы даже шанса на поломку стека не было
+    push rbx
     push 0              ;Стоп символ для вывода, чтобы потом не мучаться с счетчиком
     push rdi
     mov rax, rdi
@@ -151,7 +152,8 @@ print_uint:
                 add rsp, 8
                 jmp .others_odd
     .end:
-        add rsp, 8
+        pop rbx
+        add rsp, 32
         ret
 
 ; Выводит знаковое 8-байтовое число в десятичном формате 
@@ -331,38 +333,30 @@ read_word:
 ; Возвращает в rax: число, rdx : его длину в символах
 ; rdx = 0 если число прочитать не удалось
 parse_uint:
-    mov rax, 1            ; Хранит 10**{номер_цифры c 0}
-    xor r9, r9          ; Хранит длинну
-    xor rcx, rcx          ; Хранит число 
-    mov rsi, 10 
-    
-    .loop:
-        cmp byte[rdi + r9], 0
-        je .success
-        cmp byte[rdi + r9], '9';
-        jg .error
-        sub byte[rdi + r9], '0';
-        jl .error
-        push rax
-        mul byte[rdi + r9]
-        add rcx, rax
-        inc r9
-        pop rax
-        mul rsi
-        jmp .loop
-    .error:
-        mov rdx, 0
-        jmp .end
-    .success:
-        mov rax, rcx;
-        mov rdx, r9
-    .end:
-        ret
-        
-    
+    xor rax, rax		    ;   Регистр для числа
+	xor rdx, rdx		    ;   Длинна данного числа (Число обозначает сдвиг относительно указателя)
+	xor rcx, rcx		    ;   Буфер
 
+	.loop:
+	    xor rcx, rcx        ; Обнуление буффера
+  	    mov cl, [rdi+rdx]	; Чтение цифры [rdi+rdx]
+	    cmp cl, '0'		    ; Если меньше '0', то выход
+	    jb .end 
+	    cmp cl, '9'         ; Если больше '9', то выход
+	    ja .end
+	    sub rcx, '0'		; Перевод из ASCII в число
 
+	    mov r11, 10		    ;
+	    push rdx            ;
+	    mul r11             ; Умножаем прошлое число x10
+	    pop rdx             ;
 
+	    add rax, rcx	    ; Получаем новое число rax = rax * 10 + rcx
+	    inc rdx             ; Увеличиваем длину числа
+	    jmp .loop
+	
+	.end:
+ 	    ret
 
 ; Принимает указатель на строку, пытается
 ; прочитать из её начала знаковое число.
@@ -414,5 +408,9 @@ string_copy:
         mov byte[rsi+rax], 0
     .end:
         ret
+
+
+
+
     
 
