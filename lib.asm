@@ -6,9 +6,6 @@
 %define STD_OUT 1
 %define ST_ERR 2
 
-%define NULL_TERMINATOR 0
-%define NEW_LINE_SMBL 0xA
-
 section .text
     
 ; Принимает код возврата и завершает текущий процесс
@@ -23,7 +20,7 @@ exit:
 string_length:
     xor rax, rax; Очистить rax
     .loop:
-        cmp byte[rdi+rax], NULL_TERMINATOR
+        cmp byte[rdi+rax], `\0`
         je .end
         inc rax
         jmp .loop
@@ -41,9 +38,9 @@ print_string:
     syscall
     ret
 
-; Переводит строку (выводит символ с кодом 0xA)
+; Переводит строку (выводит символ с кодом `\n`)
 print_newline:
-    mov rdi, NEW_LINE_SMBL; Заносим '\n' в rdi
+    mov rdi, `\n`; Заносим '\n' в rdi
 
 ; Принимает код символа и выводит его в stdout
 print_char:
@@ -51,7 +48,7 @@ print_char:
     mov rdi, STD_OUT    ;то положим его на стек, и получим через rsp
     mov rax, SYS_WRITE
     mov rsi, rsp ;
-    mov rdx, 1;  Тк выводим chat, то длинна 1 байт
+    mov rdx, 1          ;Тк выводим chat, то длинна 1 байт
     syscall
     pop rdi
     ret
@@ -60,54 +57,35 @@ print_char:
 ; Совет: выделите место в стеке и храните там результаты деления
 ; Не забудьте перевести цифры в их ASCII коды.
 print_uint:
-    push NULL_TERMINATOR;Стоп символ для вывода, чтобы потом не мучаться с счетчиком в выводе
+    sub rsp, 24                 ;
     
-    xor rcx, rcx
-    mov r10, 10
-    mov rax, rdi
+    mov byte[rsp+21], `\0`      ;Тк максимальное 8-байтовое число имеет 20 цифр, то мы 21 кладем нуль-терминатор
+    mov rcx, 20                 ;Соответственно rcх=20, чтобы класть символы в обратном порядке(для корректного вывода)
+                                ;Если класть в нормальном(увеличивая rcx) то строка будет в обратном порядке
+    mov r10, 10                 
+    mov rax, rdi                
     .loop:
         mov rsi, rax
         xor rdx, rdx
         div r10
-        cmp rax, 0;
+        test rax, rax
         je .output
-        add dl, '0'
-        push rdx
-        inc rcx
+        add dl, '0'             ;Получаем символ из цифры
+        mov byte[rsp+rcx], dl
+        dec rcx
         jmp .loop
     .output:
-      xor rax, rax
-      xor rcx, rcx
       
       add sil, '0'              ;Получаем символ
-      push rsi                  ;Первая цифра -> в стек
-      .print_loop:
-        pop rdi
-        cmp rdi, NULL_TERMINATOR;
-        je .end
-
-        mov rax, rsp            ; Поскольку в стеке буквы, то он постоянно меняется, поскольку я не выделяю на нем место
-        mov rcx, 16             ; Сложно предугадать выравнивание, что
-        div rcx                 ; Не плодить много кода, который отличается только
-        cmp rdx, 0              ; Выравниванием перед вызовом
-        je .not_align           ; Удобнее сделать так
-        .aling:                             
-            sub rsp, 8
-            call print_char
-            add rsp, 8
-            jmp .print_loop
-        .not_align:
-            call print_char
-            jmp .print_loop
-          .end:
+      mov byte[rsp+rcx], sil
+      mov rax, rsp
+      add rax, rcx
+      mov rdi, rax
+      call print_string
+    .end:
+        add rsp, 24
         ret
         
-    
-
-                
-
-
-
 ; Выводит знаковое 8-байтовое число в десятичном формате 
 print_int:
     sub rsp, 8
@@ -135,17 +113,12 @@ string_equals:
     .loop:
         xor rcx, rcx                ;Очистим его на всякий случай
         mov cl, byte[rdi+rax]
-        
-        
+
         cmp cl, byte[rsi+rax]
         jne .not
         
         test rcx, rcx               ;Если rcx==0, то оба символа нулевые, т.е строки закончились
         je .yes
-        
-        mov cl, byte[rdi+rax]
-        cmp cl, byte[rsi+rax]
-        jne .not
         
         inc rax
         jmp .loop
@@ -160,29 +133,21 @@ string_equals:
         
         
 read_char:
-    push r12        ;Сохраняем callee-saved регистры
-    push r13
-    push r14
-    
     push 0          
 
     mov rdx, 1
     mov rsi, rsp   
-
-    mov rax, 0
-    mov rdi, 0
+    mov rax, SYS_READ
+    mov rdi, STD_IN
     syscall
 
     pop rax
-    
-    pop r14         ;Востанавливаем callee-saved регистр
-    pop r13
-    pop r12        
+      
     ret
 
 ; Принимает: адрес начала буфера, размер буфера
 ; Читает в буфер слово из stdin, пропуская пробельные символы в начале, .
-; Пробельные символы это пробел 0x20, табуляция 0x9 и перевод строки 0xA.
+; Пробельные символы это пробел ' ', табуляция `\t` и перевод строки `\n`.
 ; Останавливается и возвращает 0 если слово слишком большое для буфера
 ; При успехе возвращает адрес буфера в rax, длину слова в rdx.
 ; При неудаче возвращает 0 в rax
@@ -193,7 +158,7 @@ read_word:
     push r14
     
     dec rsi                     ; Здесь jle тк после вычитания из буфера, могло получиться отрицательное число
-    cmp rsi, 0                  ;
+    test rsi, rsi               ;
     jle .small_buff             ;Проверяем наличие буфера
     
     mov r12, rdi                ;Сохраняем адрес буфера
@@ -202,13 +167,13 @@ read_word:
     
     .whitespace_skip:
         call read_char
-        cmp rax, 0x20           ; Проверка на пробел
+        cmp rax, ' '           ; Проверка на пробел
         je .whitespace_skip     ;
-        cmp rax, 0x9            ; Проверка на табуляцию
+        cmp rax, `\t`            ; Проверка на табуляцию
         je .whitespace_skip     ;
-        cmp rax, 0xA            ; Проверка на перевод строки
+        cmp rax, `\n`            ; Проверка на перевод строки
         je .whitespace_skip     ;
-        cmp rax, NULL_TERMINATOR; Проверка на  ctrl+d
+        cmp rax, `\0`; Проверка на  ctrl+d
         je .empty_word
     .first_letter:
         mov byte[r12], al      ;Сохраняем символ
@@ -217,13 +182,13 @@ read_word:
         mov r14, 1
     .others_loop:
         call read_char
-        cmp rax, 0              ; Проверка на  ctrl+d
+        cmp rax, `\0`              ; Проверка на  ctrl+d
         je .success
-        cmp rax, 0x20           ; Проверка на пробел
+        cmp rax, ' '           ; Проверка на пробел
         je .success             ;
-        cmp rax, 0x9            ; Проверка на табуляцию
+        cmp rax, `\t`            ; Проверка на табуляцию
         je .success             ;
-        cmp rax, 0xA            ; Проверка на перевод строки
+        cmp rax, `\n`            ; Проверка на перевод строки
         je .success             ;
         mov byte[r12+r14], al   ; Сохраняем символ
         inc r14                 ;
@@ -232,26 +197,26 @@ read_word:
         jmp .others_loop
     .try_last:
         call read_char
-        cmp rax, 0              ; Проверка на  ctrl+d
+        cmp rax, `\0`              ; Проверка на  ctrl+d
         je .success
-        cmp rax, 0x20           ; Проверка на пробел
+        cmp rax, ' '           ; Проверка на пробел
         je .success             ;
-        cmp rax, 0x9            ; Проверка на табуляцию
+        cmp rax, `\t`            ; Проверка на табуляцию
         je .success             ;
-        cmp rax, 0xA            ; Проверка на перевод строки
+        cmp rax, `\n`            ; Проверка на перевод строки
         je .success             ;
     .small_buff:
-        mov byte[r12], NULL_TERMINATOR      ;Добавляем нуль терминатор
-        mov rax, 0
+        mov byte[r12], `\0`      ;Добавляем нуль терминатор
+        xor rax, rax
         jmp .end
     .success:
         mov rdx, r14
-        mov byte[r12+r14], NULL_TERMINATOR  ;Добавляем нуль терминатор
+        mov byte[r12+r14], `\0`  ;Добавляем нуль терминатор
         mov rax, r12;
         jmp .end 
     .empty_word:
         mov rax, r12
-        mov rdx, 0
+        xor rdx, rdx
     .end:
         pop r14
         pop r13
@@ -266,26 +231,22 @@ parse_uint:
     xor rax, rax		    ;   Регистр для числа
     xor rdx, rdx		    ;   Длинна данного числа (Число обозначает сдвиг относительно указателя)
     xor rcx, rcx		    ;   Буфер
-
+    xor r8, r8
+    mov r11, 10
 	.loop:
 	    xor rcx, rcx        ; Обнуление буффера
-  	    mov cl, [rdi+rdx]	; Чтение цифры [rdi+rdx]
+  	    mov cl, [rdi+r8]	; Чтение цифры [rdi+rdx]
 	    cmp cl, '0'		    ; Если меньше '0', то выход
 	    jb .end 
 	    cmp cl, '9'         ; Если больше '9', то выход
 	    ja .end
 	    sub rcx, '0'		; Перевод из ASCII в число
-
-	    mov r11, 10		    ;
-	    push rdx            ;
 	    mul r11             ; Умножаем прошлое число x10
-	    pop rdx             ;
-
 	    add rax, rcx	    ; Получаем новое число rax = rax * 10 + rcx
-	    inc rdx             ; Увеличиваем длину числа
+	    inc r8             ; Увеличиваем длину числа
 	    jmp .loop
-	
 	.end:
+           mov rdx, r8
  	    ret
 
 ; Принимает указатель на строку, пытается
@@ -339,12 +300,11 @@ string_copy:
         dec rdx
         jmp .loop
     .overflow:
-        mov rax, NULL_TERMINATOR;
+        mov rax, `\0`;
         jmp .end
     .success:
-        mov byte[rsi+rax], NULL_TERMINATOR
+        mov byte[rsi+rax], `\0`
     .end:
         ret
-
 
 
