@@ -167,13 +167,13 @@ read_word:
     
     .whitespace_skip:
         call read_char
-        cmp rax, ' '           ; Проверка на пробел
+        cmp al, ' '           ; Проверка на пробел
         je .whitespace_skip     ;
-        cmp rax, `\t`            ; Проверка на табуляцию
+        cmp al, `\t`            ; Проверка на табуляцию
         je .whitespace_skip     ;
-        cmp rax, `\n`            ; Проверка на перевод строки
+        cmp al, `\n`            ; Проверка на перевод строки
         je .whitespace_skip     ;
-        cmp rax, `\0`; Проверка на  ctrl+d
+        cmp al, `\0`; Проверка на  ctrl+d
         je .empty_word
     .first_letter:
         mov byte[r12], al      ;Сохраняем символ
@@ -182,13 +182,13 @@ read_word:
         mov r14, 1
     .others_loop:
         call read_char
-        cmp rax, `\0`              ; Проверка на  ctrl+d
+        cmp al, `\0`              ; Проверка на  ctrl+d
         je .success
-        cmp rax, ' '           ; Проверка на пробел
+        cmp al, ' '           ; Проверка на пробел
         je .success             ;
-        cmp rax, `\t`            ; Проверка на табуляцию
+        cmp al, `\t`            ; Проверка на табуляцию
         je .success             ;
-        cmp rax, `\n`            ; Проверка на перевод строки
+        cmp al, `\n`            ; Проверка на перевод строки
         je .success             ;
         mov byte[r12+r14], al   ; Сохраняем символ
         inc r14                 ;
@@ -197,13 +197,13 @@ read_word:
         jmp .others_loop
     .try_last:
         call read_char
-        cmp rax, `\0`              ; Проверка на  ctrl+d
+        cmp al, `\0`              ; Проверка на  ctrl+d
         je .success
-        cmp rax, ' '           ; Проверка на пробел
+        cmp al, ' '           ; Проверка на пробел
         je .success             ;
-        cmp rax, `\t`            ; Проверка на табуляцию
+        cmp al, `\t`            ; Проверка на табуляцию
         je .success             ;
-        cmp rax, `\n`            ; Проверка на перевод строки
+        cmp al, `\n`            ; Проверка на перевод строки
         je .success             ;
     .small_buff:
         mov byte[r12], `\0`      ;Добавляем нуль терминатор
