@@ -147,6 +147,8 @@ read_word:
     mov r12, rdi                ; Сохраняем адрес буфера
     mov r13, rsi                ; Сохраняем размер буфера
     xor r14, r14                ; Очищаем счетчик символов
+      
+    
     .whitespace_skip:           ; Сначала пропускаем пробелы
         call read_char
         cmp al, ' '             ; Проверка на пробел
@@ -155,53 +157,34 @@ read_word:
         je .whitespace_skip     ;
         cmp al, `\n`            ; Проверка на перевод строки
         je .whitespace_skip     ;
-        cmp al, `\0`            ; Проверка на  ctrl+d
-        je .empty_word
-    cmp r13, 1                  ; Проверяем размер буфера
-    jb .small_buff              ;
-    dec r13                     ;
-    .first_letter:
-        mov byte[r12], al       ; Сохраняем символ
-        cmp r13, 1
-        je .try_last
-        mov r14, 1
-    .others_loop:
+
+    .non_space_loop:
+        cmp r13, r14
+        jb .fail
+        
+        mov byte[r12+r14], al
+        cmp al, `\0`
+        je .success 
+        inc r14                 ; Возможно после поставить
         call read_char
-        cmp al, `\0`            ; Проверка на  ctrl+d
-        je .success
+        
         cmp al, ' '             ; Проверка на пробел
-        je .success             ;
+        je .space_symbol        ;
         cmp al, `\t`            ; Проверка на табуляцию
-        je .success             ;
+        je .space_symbol        ;
         cmp al, `\n`            ; Проверка на перевод строки
-        je .success             ;
-        mov byte[r12+r14], al   ; Сохраняем символ
-        inc r14                 ;
-        cmp r14, r13            ;
-        je .try_last            ; При совпадении счетчика и размера буфера выходим
-        jmp .others_loop
-    .try_last:
-        call read_char
-        cmp al, `\0`            ; Проверка на  ctrl+d
-        je .success
-        cmp al, ' '             ; Проверка на пробел
-        je .success             ;
-        cmp al, `\t`            ; Проверка на табуляцию
-        je .success             ;
-        cmp al, `\n`            ; Проверка на перевод строки
-        je .success             ;
-    .small_buff:
-        mov byte[r12], `\0`     ; Добавляем нуль терминатор
-        xor rax, rax
+        je .space_symbol        ;
+        jmp .non_space
+        .space_symbol:
+            mov al, `\0`
+        .non_space:
+            jmp .non_space_loop
+    .fail:
+        mov rax, 0
         jmp .end
     .success:
-        mov rdx, r14
-        mov byte[r12+r14], `\0` ; Добавляем нуль терминатор
-        mov rax, r12;
-        jmp .end 
-    .empty_word:
         mov rax, r12
-        xor rdx, rdx
+        mov rdx, r14
     .end:
         pop r14
         pop r13
@@ -284,5 +267,4 @@ string_copy:
         mov byte[rsi+rax], `\0`
     .end:
         ret
-
 
