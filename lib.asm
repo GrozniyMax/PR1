@@ -147,38 +147,28 @@ read_word:
     mov r12, rdi                ; Сохраняем адрес буфера
     mov r13, rsi                ; Сохраняем размер буфера
     xor r14, r14                ; Очищаем счетчик символов
-      
-    
-    .whitespace_skip:           ; Сначала пропускаем пробелы
+
+    .loop:
         call read_char
         cmp al, ' '             ; Проверка на пробел
-        je .whitespace_skip     ;
+        je .whitespace          ;
         cmp al, `\t`            ; Проверка на табуляцию
-        je .whitespace_skip     ;
+        je .whitespace          ;
         cmp al, `\n`            ; Проверка на перевод строки
-        je .whitespace_skip     ;
-
-    .non_space_loop:
+        je .whitespace          ;
+        jmp .not_whitespace
+    .whitespace:                ; Сначала пропускаем пробелы
+        test r14, r14
+        je .loop
+        mov al, `\0`
+    .not_whitespace:
         cmp r13, r14
         jb .fail
-        
         mov byte[r12+r14], al
         cmp al, `\0`
         je .success 
         inc r14                 ; Возможно после поставить
-        call read_char
-        
-        cmp al, ' '             ; Проверка на пробел
-        je .space_symbol        ;
-        cmp al, `\t`            ; Проверка на табуляцию
-        je .space_symbol        ;
-        cmp al, `\n`            ; Проверка на перевод строки
-        je .space_symbol        ;
-        jmp .non_space
-        .space_symbol:
-            mov al, `\0`
-        .non_space:
-            jmp .non_space_loop
+        jmp .loop
     .fail:
         mov rax, 0
         jmp .end
@@ -267,4 +257,3 @@ string_copy:
         mov byte[rsi+rax], `\0`
     .end:
         ret
-
